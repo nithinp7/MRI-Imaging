@@ -1,7 +1,11 @@
 # MRI-Imaging
 GPU implementation of marching cubes to reconstruct MRI scans and other voxelized data in 3D.
 
-YouTube Video Link: https://www.youtube.com/watch?v=feuFW5-fuBs
+YouTube Video Links: 
+
+https://youtu.be/SPiPd0WZKoI
+
+https://youtu.be/feuFW5-fuBs
 
 ![MRI Reconstruction Image 1](https://github.com/nithinp7/MRI-Imaging/blob/master/out-001.jpg)
 
