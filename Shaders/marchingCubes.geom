@@ -1,9 +1,5 @@
 #version 430
 
-#define WIDTH 256
-#define DEPTH 99
-#define HEIGHT 256
-
 const ivec3 cornerTable [] = {
 		ivec3(0, 0, 0),
 		ivec3(1, 0, 0),
@@ -44,17 +40,23 @@ const int edgeToCornerTable[][2] = {
 	{ 3, 7 }
 };
 
-layout(binding = 0) uniform usamplerBuffer voxels;
+layout(binding = 0) uniform isamplerBuffer voxels;
 layout(binding = 1) uniform isamplerBuffer triTableTex;
 
-uniform bool geomBypass;
-
-uniform mat4 model;
-uniform mat4 view;
-uniform mat4 projection;
+//uniform mat4 model;
+//uniform mat4 view;
+//uniform mat4 projection;
 //uniform mat4 smd;
 
-uniform float par_t;
+uniform int WIDTH;
+uniform int HEIGHT;
+uniform int DEPTH;
+
+uniform int xRat;
+uniform int yRat;
+uniform int zRat;
+
+uniform int threshold;
 
 in ivec3 gridPos[];
 
@@ -66,8 +68,8 @@ int cube[8];
 
 int get_voxel(int x, int y, int z)
 {
-	x = (x + 128) % 256;
-	y = (256 - y);
+	//x = (x + WIDTH / 2) % WIDTH;
+	//y = (HEIGHT - y);
 
 	//return voxels[z * WIDTH * HEIGHT + y * WIDTH + x];
 	return int(texelFetch(voxels, z * WIDTH * HEIGHT + y * WIDTH + x).r);
@@ -110,16 +112,13 @@ layout(points) in;
 layout(triangle_strip, max_vertices = 15) out;
 void main()
 {
-	/**/
 	Normal = vec3(0.0, 0.0, 1.0);
 	Color = vec4(1.0, 0.0, 0.0, 1.0);
-	mat4 mvp = projection * view * model;
-	vec4 gPos = mvp * vec4(float(gridPos[0].x), float(gridPos[0].y), float(gridPos[0].z), 0.0);
-	
+
 	vec3 pos = vec3(float(gridPos[0].x), float(gridPos[0].y), float(gridPos[0].z));
 	
-	float threshold = 40.0;
-	float limit = 90.0;
+	//int threshold = 200;//600.0;
+	//int limit = 800;
 	
 	//if(pos.z < par_t) return;
 
@@ -135,7 +134,6 @@ void main()
 	if (config == 0 || config == 255)
 		return;
 	
-	//vec3 pos = vec3(gPos.x, gPos.y, 0.5 * gPos.z);
 	int edge = 0;
 	bool cont = false;
 	for (int i = 0; i < 5; i++)
@@ -162,32 +160,16 @@ void main()
 			vec3 v0 = edgeTable[index][0];
 			vec3 v1 = edgeTable[index][1];
 						
-			//vec3 vertPos = offs + pos + 0.5f  * edgeTable[index][0] + 0.5f * edgeTable[index][1];
-			//vec3 vertPos = offs + pos + -d0 * (v1 - v0) / (d1 - d0) + v0;
 			vec3 vertPos = offs + pos + -d0 * (v1 - v0) / (d1 - d0) + v0;
 
 			vec3 g0 = get_gradient(gridPos[0].x + c0.x, gridPos[0].y + c0.y, gridPos[0].z + c0.z);
 			vec3 g1 = get_gradient(gridPos[0].x + c1.x, gridPos[0].y + c1.y, gridPos[0].z + c1.z);
 
 			vec3 g = -d0 * (g1 - g0) / (d1 - d0) + g0;
-				
-			//FragPos = vec3(Model * vec4(vertPos.x / float(WIDTH), vertPos.y / float(HEIGHT), vertPos.z / float(DEPTH), 1.0));
-			//Normal = normalize(g);
-			
-			FragPos = (model * vec4(0.1 * vertPos, 1.0)).xyz;//vec3(model * vec4(vertPos, 1.0));
-			Normal = mat3(transpose(inverse(model))) * normalize(g);  
-			Color = vec4(0.8, 0.4, 0.6, 1.0);
 
-			//FragPos = vec3(float(gridPos[0].x + i), float(gridPos[0].y + i*i), float(gridPos[0].z));
-			//Normal = vec3(0.0, 0.0, 1.0);
-			//Color = vec4(1.0, 0.0, 0.0, 1.0);
-						
-			//mat4 pr = mat4(1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0);
-			gl_Position = mvp * vec4(0.1 * vertPos, 1.0);//vec4(vertPos, 1.0);
-						
-			//gl_Position = vec4(FragPos, 1.0);
-			//gl_Position = vec4(vertPos, 1.0);
-			//vertices.push_back(make_vertex(vertPos, g));
+			FragPos = 0.1 * vertPos * vec3(xRat, -yRat, 3 * zRat);
+			Normal = g;
+			Color = vec4(0.8, 0.4, 0.6, 1.0);
 
 			EmitVertex();
 						
@@ -197,9 +179,5 @@ void main()
 		if(cont) break;
 
 		EndPrimitive();
-
-		//unsigned int vs = vertices.size();
-		//set_normals(vertices[vs - 3], vertices[vs - 2], vertices[vs - 1]);
 	}
-	/**/
 }

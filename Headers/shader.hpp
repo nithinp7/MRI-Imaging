@@ -90,14 +90,12 @@ public:
 		if (geometryPath != nullptr) {
 			glAttachShader(ID, geometry);
 			if (dbg) {
-				const GLchar* feedbackVaryings[] = { "FragPos", "Normal", "Color" };
+				const GLchar* feedbackVaryings[] = { "FragPos", "Normal", "Color"};
 				glTransformFeedbackVaryings(ID, 3, feedbackVaryings, GL_INTERLEAVED_ATTRIBS);
 			}
 		}
 		glLinkProgram(ID);
 		checkCompileErrors(ID, "PROGRAM");
-
-		printf("HERE\n");
 
 		// delete the shaders as they're linked into our program now and no longer necessery
 		glDeleteShader(vertex);
@@ -191,7 +189,6 @@ private:
 		else
 		{
 			glGetProgramiv(shader, GL_LINK_STATUS, &success);
-			printf("OY\n");
 			if (!success)
 			{
 				glGetProgramInfoLog(shader, 1024, NULL, infoLog);

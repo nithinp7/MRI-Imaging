@@ -3,18 +3,7 @@
 
 std::string preamble = 
 	"Marching Cubes Algorithm \n\n"
-	"Press the U,I,O to increase transformations \n"
-	"Press the J,K,L to decrease transformations \n"
-	"\tKey alone will alter rotation rate\n "
-	"\tShift+Key will alter scale\n "
-	"\tControl+Key will alter translation\n "
-	"Pressing Comma will increase transformation Step\n "
-	"Pressing Period will decrease transformation Step\n "
-	"Pressing G will reset transformations\n "
-	"Pressing Q will toggle Quaternion Rotation\n "
-	"Pressing B will toggle reflections for the box textures\n "
-	"Pressing H will toggle heightmap\n "
-	"Pressing P will print information\n\n";
+	"Press P to save a screenshot\n\n";
 
 int main()
 {
@@ -66,7 +55,8 @@ int main()
 	// -------------------------
 	Shader skyboxShader("../MarchingCubes/Shaders/skybox.vert", "../MarchingCubes/Shaders/skybox.frag");
 	Shader normalShader("../MarchingCubes/Shaders/normal.vert", "../MarchingCubes/Shaders/normal.frag", "../MarchingCubes/Shaders/normal.geom");
-	Shader marchingCubesShader("../MarchingCubes/Shaders/marchingCubes.vert", "../MarchingCubes/Shaders/marchingCubes.frag", "../MarchingCubes/Shaders/marchingCubes.geom", false);
+	Shader marchingCubesShader("../MarchingCubes/Shaders/marchingCubes.vert", "../MarchingCubes/Shaders/marchingCubes.frag", "../MarchingCubes/Shaders/marchingCubes.geom", true);
+	Shader renderPassShader("../MarchingCubes/Shaders/renderPass.vert", "../MarchingCubes/Shaders/renderPass.frag");
 	// set up vertex data (and buffer(s)) and configure vertex attributes
 	//  Defining each one seperately, but look at Project 2 on using only one.
 	// ------------------------------------------------------------------
@@ -149,7 +139,7 @@ int main()
 	};
 
 	// init heatmap
-	Heightmap heightmap("../MarchingCubes/Media/heightmaps/hflab4.jpg");
+	Render render = Render();
 	unsigned int box_texture = loadTexture("../MarchingCubes/Media/textures/container.jpg");
 	unsigned int smile_texture = loadTexture("../MarchingCubes/Media/textures/awesomeface.png");
 	unsigned int grey_texture = loadTexture("../MarchingCubes/Media/textures/grey.png");
@@ -165,8 +155,8 @@ int main()
 	skyboxShader.use();
 	skyboxShader.setInt("skybox", 0);
 
-	marchingCubesShader.use();
-	marchingCubesShader.setInt("material.diffuse", 0);
+	renderPassShader.use();
+	renderPassShader.setInt("material.diffuse", 0);
 
 	// render loop
 	// -----------
@@ -195,12 +185,12 @@ int main()
 		model = glm::rotate(model, glm::radians(10.0f*currentFrame), glm::vec3(1.0f, 0.3f, 0.5f));
 
 		// Setup shader info
-		marchingCubesShader.use();
-		marchingCubesShader.setMat4("model", model);
-		marchingCubesShader.setMat4("view", view);
-		marchingCubesShader.setMat4("projection", projection);
-		
-		set_lighting(marchingCubesShader, pointLightPositions);
+		renderPassShader.use();
+		//renderPassShader.setMat4("model", model);
+		renderPassShader.setMat4("view", view);
+		renderPassShader.setMat4("projection", projection);
+
+		set_lighting(renderPassShader, pointLightPositions);
 
 		// Turn rotation rate into quaturian and cumulate the rotations
 		rotation *= glm::quat(rotation_rate * deltaTime);
@@ -209,20 +199,15 @@ int main()
 
 		glBindVertexArray(0);
 
-		if (drawHeightmap)
-		{
-			marchingCubesShader.use();
-			heightmap.Draw(marchingCubesShader, grey_texture);
-		}
+		render.Draw(marchingCubesShader, renderPassShader, threshold, updateGeom);
+		updateGeom = false;
 		
 		if (drawNormals) {
 			normalShader.use();
 			normalShader.setMat4("projection", projection);
 			normalShader.setMat4("view", view);
-			heightmap.Draw(normalShader, grey_texture);
+			//heightmap.Draw(normalShader, grey_texture);
 		}
-
-
 
 		// draw skybox as last
 		glDepthFunc(GL_LEQUAL);  // change depth function so depth test passes when values are equal to depth buffer's content
@@ -238,8 +223,15 @@ int main()
 		glBindVertexArray(0);
 		glDepthFunc(GL_LESS); // set depth function back to default
 
-							  // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
-							  // -------------------------------------------------------------------------------
+		// save frame to file if print flag is set
+		if (print)
+		{
+			print_screen();
+			print = false;
+		}
+
+		// glfw: swap buffers and poll IO events (keys pressed/released, mouse moved etc.)
+		// -------------------------------------------------------------------------------
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
@@ -248,10 +240,52 @@ int main()
 	// ------------------------------------------------------------------------
 	glDeleteVertexArrays(1, &skyboxVAO);
 	glDeleteBuffers(1, &skyboxVAO);
-	heightmap.delete_buffers();
+	render.delete_buffers();
 
 	glfwTerminate();
 	return 0;
+}
+
+
+void print_screen()
+{
+	string path = "../MarchingCubes/Animation/out-";
+	if (printID < 100)
+		path += "0";
+	if (printID < 10)
+		path += "0";
+	path += to_string(printID);
+	path += ".tif";
+
+	char* tmpBuf = (char*)std::malloc(STRIP_SIZE);
+
+	glReadBuffer(GL_FRONT);
+	glReadPixels(0, 0, SCR_WIDTH, SCR_HEIGHT, GL_RGB, GL_UNSIGNED_BYTE, tmpBuf);
+
+	// have to flip upside down since tiff readers ignore orientation
+	char* swapMem = (char*)std::malloc(3 * SCR_WIDTH);
+	for (int j = 0; j < SCR_HEIGHT / 2; j++)
+	{
+		memcpy(swapMem, &tmpBuf[3 * SCR_WIDTH * j], 3 * SCR_WIDTH);
+		memcpy(&tmpBuf[3 * SCR_WIDTH * j], &tmpBuf[3 * SCR_WIDTH * (SCR_HEIGHT - j - 1)], 3 * SCR_WIDTH);
+		memcpy(&tmpBuf[3 * SCR_WIDTH * (SCR_HEIGHT - j - 1)], swapMem, 3 * SCR_WIDTH);
+	}
+	std::free(swapMem);
+
+	ofstream myFile(path.c_str(), ios::out | ios::binary);
+	myFile.write(TIF_HEADER, 8);
+	myFile.write(tmpBuf, STRIP_SIZE);
+	myFile.write(TIF_FOOTER, sizeof(TIF_FOOTER));
+
+	if (!myFile) 
+		printf("Unable to save the current frame to the file: %s\n", path.c_str());
+	else
+		printf("Saved screenshot to this file: %s\n", path.c_str());
+	
+	printID++;
+
+	myFile.close();
+	std::free(tmpBuf);
 }
 
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
@@ -283,7 +317,7 @@ void processInput(GLFWwindow *window)
 	float step = deltaTime * step_multiplier;
 
 
-	// Changing overall behavior (only want these to trigger once so add a delay of half a second)
+	// debounced button presses
 	float currentFrame = glfwGetTime();
 	bool somethingPressed = glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS ||
 							glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS ||
@@ -294,12 +328,18 @@ void processInput(GLFWwindow *window)
 							glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS;
 	if (somethingPressed && last_pressed < currentFrame - 0.5f || last_pressed == 0.0f)
 	{
-		if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS)
-			drawHeightmap = !drawHeightmap;
-		if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS) 
-			drawBoxes = !drawBoxes;
-		if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS) 
-			drawNormals = !drawNormals;
+		if (glfwGetKey(window, GLFW_KEY_H) == GLFW_PRESS) {
+			threshold = 1;
+			updateGeom = true;
+		}
+		if (glfwGetKey(window, GLFW_KEY_B) == GLFW_PRESS) {
+			threshold += 20;//threshold = 90;
+			updateGeom = true;
+		}
+		if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS) {
+			threshold = 400;
+			updateGeom = true;
+		}
 		if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
 			if (quaterians)
 			{
@@ -335,15 +375,7 @@ void processInput(GLFWwindow *window)
 		// Print all info
 		if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS)
 		{
-			std::printf("Frame Rate: %.05f\nCurrent Frame: %.05f\tLast Pressed: %.05f\n", framerate, currentFrame, last_pressed);
-			std::printf("Step: %.05f\tStep Multiplier: %.04f\n", step, step_multiplier);
-			std::printf("Rotation Rate (%.05f,%.05f,%.05f)\n", rotation_rate.x, rotation_rate.y, rotation_rate.z);
-			std::printf("Rotation Euler (%.05f,%.05f,%.05f)\n", rotation_euler.x, rotation_euler.y, rotation_euler.z);
-			std::printf("Rotation Quaterians (%.05f,%.05f,%.05f,%.05f)\n", rotation.x, rotation.y, rotation.z, rotation.w);
-			std::printf("Translation (%.05f,%.05f,%.05f)\n", rotation_rate.x, rotation_rate.y, rotation_rate.z);
-			std::printf("Scale (%.05f,%.05f,%.05f)\n", scale.x, scale.y, scale.z);
-			quaterians ? std::printf("Using Quaterians\n") : std::printf("Not Using Quaterians\n");
-			std::printf("\n");
+			print = true;
 		}
 
 
@@ -397,9 +429,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height)
 {
 	// make sure the viewport matches the new window dimensions; note that width and 
 	// height will be significantly larger than specified on retina displays.
-	glViewport(0, 0, width, height);
-	SCR_WIDTH = width;
-	SCR_HEIGHT = height;
+	//glViewport(0, 0, width, height);
+	//SCR_WIDTH = width;
+	//SCR_HEIGHT = height;
 
 }
 
@@ -562,14 +594,14 @@ void set_lighting(Shader shader, glm::vec3* pointLightPositions)
 	shader.setFloat("pointLights[3].linear", 0.09);
 	shader.setFloat("pointLights[3].quadratic", 0.032);
 	// spotLight
-	shader.setVec3("spotLight.position", camera.Position);
+	shader.setVec3("spotLight.position", camera.Position + 0.1f * camera.Front);
 	shader.setVec3("spotLight.direction", camera.Front);
 	shader.setVec3("spotLight.ambient", 0.0f, 0.0f, 0.0f);
 	shader.setVec3("spotLight.diffuse", 1.0f, 1.0f, 1.0f);
 	shader.setVec3("spotLight.specular", 1.0f, 1.0f, 1.0f);
-	shader.setFloat("spotLight.constant", 0.1f);
-	shader.setFloat("spotLight.linear", 0.0f);
-	shader.setFloat("spotLight.quadratic", 0.002f);
+	shader.setFloat("spotLight.constant", 0.0f);
+	shader.setFloat("spotLight.linear", 0.001f);
+	shader.setFloat("spotLight.quadratic", 0.0009f);
 	shader.setFloat("spotLight.cutOff", glm::cos(glm::radians(12.5f)));
 	shader.setFloat("spotLight.outerCutOff", glm::cos(glm::radians(15.0f)));
 
